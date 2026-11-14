@@ -1,0 +1,102 @@
+services:
+  cinema-postgres:
+    image: postgres:16-alpine
+    container_name: cinema-postgres
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cinema_db
+    volumes:
+      - cinema_postgres_data:/var/lib/postgresql/data
+    networks:
+      - raft-net
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cinema_db"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+
+  raft-node-1:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: raft-node-1
+    ports:
+      - "9001:8001"
+    environment:
+      - RAFT_NODE_ID=node1
+      - RAFT_PORT=8001
+      - RAFT_DATA_DIR=/app/data/node1
+      - RAFT_PEERS=node1=http://raft-node-1:8001,node2=http://raft-node-2:8002,node3=http://raft-node-3:8003
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@cinema-postgres:5432/cinema_db
+      - FAULT_AUTH_TOKEN=dev-fault-insecure-local-token
+    volumes:
+      - node1_data:/app/data/node1
+    depends_on:
+      cinema-postgres:
+        condition: service_healthy
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    networks:
+      - raft-net
+    mem_limit: 512m
+
+  raft-node-2:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: raft-node-2
+    ports:
+      - "9002:8002"
+    environment:
+      - RAFT_NODE_ID=node2
+      - RAFT_PORT=8002
+      - RAFT_DATA_DIR=/app/data/node2
+      - RAFT_PEERS=node1=http://raft-node-1:8001,node2=http://raft-node-2:8002,node3=http://raft-node-3:8003
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@cinema-postgres:5432/cinema_db
+      - FAULT_AUTH_TOKEN=dev-fault-insecure-local-token
+    volumes:
+      - node2_data:/app/data/node2
+    depends_on:
+      cinema-postgres:
+        condition: service_healthy
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8002"]
+    networks:
+      - raft-net
+    mem_limit: 512m
+
+  raft-node-3:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: raft-node-3
+    ports:
+      - "9003:8003"
+    environment:
+      - RAFT_NODE_ID=node3
+      - RAFT_PORT=8003
+      - RAFT_DATA_DIR=/app/data/node3
+      - RAFT_PEERS=node1=http://raft-node-1:8001,node2=http://raft-node-2:8002,node3=http://raft-node-3:8003
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@cinema-postgres:5432/cinema_db
+      - FAULT_AUTH_TOKEN=dev-fault-insecure-local-token
+    volumes:
+      - node3_data:/app/data/node3
+    depends_on:
+      cinema-postgres:
+        condition: service_healthy
+    command: ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8003"]
+    networks:
+      - raft-net
+    mem_limit: 512m
+
+volumes:
+  cinema_postgres_data:
+  node1_data:
+  node2_data:
+  node3_data:
+
+networks:
+  raft-net:
+    driver: bridge
